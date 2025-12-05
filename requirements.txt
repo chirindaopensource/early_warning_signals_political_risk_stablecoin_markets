@@ -1,0 +1,123 @@
+﻿# ==============================================================================#
+#  OBPS (On-Chain Behavioral Pre-Emption System) - Production Dependencies
+#  
+#  Version Constraints Strategy:
+#  • Lower bounds ensure critical features/bugfixes are present
+#  • Upper bounds prevent breaking changes from major version bumps
+#  • Pin formats: >=X.Y.Z,<(X+1).0.0 for major stability
+#  
+#  Python Version Requirement: >=3.7,<3.13
+#  Last Updated: 2025-12-05
+# ==============================================================================#
+
+# Core Numerical Computing Stack
+# ------------------------------------------------------------------------------
+numpy>=1.20.0,<2.0.0
+    # Rationale: v1.20+ provides stable uint64 handling (blockchain uint256 conversion)
+    #            Avoid v2.0+ due to breaking API changes in dtype handling
+    
+pandas>=1.3.0,<3.0.0
+    # Rationale: v1.3+ includes proper datetime64[ns, UTC] timezone handling
+    #            Required for blockchain timestamp normalization
+    
+scipy>=1.7.0,<2.0.0
+    # Rationale: v1.7+ has robust Hilbert transform (complex signal stability)
+    #            CubicSpline boundary conditions improved in v1.7+
+
+# Econometric and Time-Series Analysis
+# ------------------------------------------------------------------------------
+statsmodels>=0.13.0,<0.15.0
+    # Rationale: v0.13+ required for VAR model improvements and proper ADF lag selection
+    #            VARResultsWrapper typing compatibility
+    #            Cholesky SVAR identification enhancements
+    
+arch>=5.0.0,<7.0.0
+    # Rationale: v5.0+ provides stable GARCH/volatility modeling APIs
+    #            Used for SVAR residual heteroskedasticity analysis
+
+# Signal Processing (Hilbert-Huang Transform)
+# ------------------------------------------------------------------------------
+EMD-signal>=1.3.0,<2.0.0
+    # Rationale: Primary Python implementation of Empirical Mode Decomposition
+    #            v1.3+ includes optimized sifting algorithms and envelope interpolation
+    #            Alternative package name to PyEMD (same functionality)
+
+# Optional: Enhanced Structural Break Detection
+# ------------------------------------------------------------------------------
+ruptures>=1.1.0,<2.0.0
+    # Rationale: Advanced change-point detection (complements Bai-Perron)
+    #            Provides dynamic programming algorithms for segment optimization
+    #            Optional but recommended for robustness checks
+
+# Development and Quality Assurance (Optional but Recommended)
+# ------------------------------------------------------------------------------
+pytest>=7.0.0,<9.0.0
+    # Rationale: Testing framework for validation suite
+    
+pytest-cov>=3.0.0,<5.0.0
+    # Rationale: Code coverage reporting for test completeness
+    
+mypy>=0.990,<2.0.0
+    # Rationale: Static type checking (essential given extensive typehints)
+    
+black>=22.0.0,<25.0.0
+    # Rationale: PEP-8 compliant code formatting
+    
+flake8>=5.0.0,<8.0.0
+    # Rationale: Linting for code quality enforcement
+    
+isort>=5.10.0,<6.0.0
+    # Rationale: Import statement organization (PEP-8 Section 3)
+
+# Blockchain Data Integration (Optional - for full pipeline)
+# ------------------------------------------------------------------------------
+web3>=6.0.0,<7.0.0
+    # Rationale: Ethereum JSON-RPC interaction (eth_getCode for contract verification)
+    #            Only required if querying nodes directly vs. BigQuery
+    
+google-cloud-bigquery>=3.0.0,<4.0.0
+    # Rationale: Google BigQuery client for crypto_ethereum dataset queries
+    #            Only required for direct blockchain data extraction
+
+# Performance Optimization (Optional)
+# ------------------------------------------------------------------------------
+numba>=0.56.0,<0.60.0
+    # Rationale: JIT compilation for EMD sifting loops and dynamic programming
+    #            Can provide 10-100x speedup for iterative algorithms
+    
+bottleneck>=1.3.0,<2.0.0
+    # Rationale: Fast NumPy array functions (rolling window operations)
+    #            Accelerates time-series preprocessing
+
+
+# ==============================================================================#
+#  INSTALLATION INSTRUCTIONS
+# ==============================================================================#
+#
+#  Minimum Requirements (Core Functionality Only):
+#  -----------------------------------------------
+#  pip install numpy>=1.20.0,<2.0.0 \
+#              pandas>=1.3.0,<3.0.0 \
+#              scipy>=1.7.0,<2.0.0 \
+#              statsmodels>=0.13.0,<0.15.0 \
+#              EMD-signal>=1.3.0,<2.0.0
+#
+#  Full Production Stack:
+#  ----------------------
+#  pip install -r requirements.txt
+#
+#  Generate Locked Requirements (Reproducibility):
+#  -----------------------------------------------
+#  pip freeze > requirements-lock.txt
+#
+#  Python Version:
+#  ---------------
+#  Ensure Python >=3.7,<3.13 is installed
+#  Check with: python --version
+#
+#  EMD-signal Import Note:
+#  -----------------------
+#  Package name: EMD-signal (PyPI)
+#  Import statement: from PyEMD import EMD
+#
+# ==============================================================================#
