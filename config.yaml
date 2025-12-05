@@ -1,0 +1,181 @@
+﻿# =============================================================================
+# MASTER STUDY CONFIGURATION: Mukhia et al. (2025)
+# "Early-Warning Signals of Political Risk in Stablecoin Markets"
+# =============================================================================
+
+# -------------------------------------------------------------------------
+# SECTION 1: GLOBAL METADATA & SCOPE
+# -------------------------------------------------------------------------
+meta:
+  study_title: "Early-Warning Signals of Political Risk in Stablecoin Markets"
+  authors:
+    - "Mukhia"
+    - "Sharma"
+    - "Luwang"
+    - "Nurujjaman"
+    - "Hens"
+    - "Saha"
+    - "Chakraborty"
+  observation_window:
+    start_date: "2024-03-01"
+    end_date: "2025-02-28"
+    timezone: "UTC"
+  critical_events:
+    election_day: "2024-11-05"        # Main political shock
+    human_signal_date: "2024-11-03"   # Structural break in EOA-EOA series
+  frequency: "1D"                     # Daily aggregation
+
+# -------------------------------------------------------------------------
+# SECTION 2: RAW DATA SCHEMAS (INPUT VECTORS)
+# -------------------------------------------------------------------------
+schemas:
+
+  # Input Vector A: Raw Blockchain Logs (On-Chain Ledger)
+  chain_raw:
+    columns:
+      timeStamp: "int64"         # Unix Epoch time (UTC)
+      tokenAddress: "string"     # ERC-20 contract address
+      from: "string"             # Sender address
+      to: "string"               # Receiver address
+      value: "object"            # Raw uint256 as string
+      fromIsContract: "int8"     # 0 or 1
+      toIsContract: "int8"       # 0 or 1
+      transactionHash: "string"  # Tx identifier
+      blockNumber: "int64"       # Block height
+      logIndex: "int64"          # Log index within block/tx
+      txStatus: "int8"           # 0 = success, 1 = failed (or similar)
+      isInternal: "int8"         # Optional: 0 = top-level, 1 = internal
+    assets:
+      USDT:
+        address: "0xdac17f958d2ee523a2206206994597c13d831ec7"
+        decimals: 6
+      USDC:
+        address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        decimals: 6
+    topology_filters:
+      human_signal:                  # EOA-EOA: Human-driven
+        fromIsContract: 0
+        toIsContract: 0
+      algo_signal:                   # SC-SC: Algorithmic (code-driven)
+        fromIsContract: 1
+        toIsContract: 1
+      # Note: Other topologies (0,1) and (1,0) can be tracked separately if desired.
+
+  # Input Vector B: Market Microstructure (Exchange Data)
+  market_raw:
+    columns:
+      Date: "datetime64[ns]"         # UTC-normalized date
+      Symbol: "string"               # e.g., "BTC/USD", "USDT/USD"
+      Close: "float64"               # Daily closing price
+      Volume: "float64"              # Daily volume in USD
+    symbols:
+      - "BTC/USD"
+      - "ETH/USD"
+      - "USDT/USD"
+      - "USDC/USD"
+
+# -------------------------------------------------------------------------
+# SECTION 3: PRE-PROCESSING & STATIONARITY
+# -------------------------------------------------------------------------
+preprocessing:
+  normalization_equation: "value / (10 ** decimals)"  # Eq. (1)
+  handling:
+    drop_zero_value: true
+    drop_failed_tx: true         # Use txStatus/isError if provided
+    tx_status_column: "txStatus" # Name of status column to check
+    accepted_status:             # Codes indicating success
+      - 0
+  transformations:
+    logarithm: true              # Use log-transformed series
+    differencing: "conditional"  # Apply if ADF rejects stationarity in levels
+  stationarity_test:
+    method: "Augmented Dickey-Fuller"
+    regression: "ct"             # Constant + Trend
+    autolag: "AIC"
+    significance_level: 0.05
+    critical_values_source: "MacKinnon (1996)"
+
+# -------------------------------------------------------------------------
+# SECTION 4: STRUCTURAL BREAK DETECTION (BAI-PERRON + SupF + AAFT)
+# -------------------------------------------------------------------------
+bai_perron:
+  model_type: "mean_shift"             # y_t = mu_j + u_t
+  algorithm: "dynamic_programming"     # Global SSR minimization
+  parameters:
+    max_breaks: 5
+    trimming_epsilon: 0.15             # Min segment ~15% of T
+    significance_test: "SupF"
+    alpha: 0.05
+  robustness:
+    method: "AAFT Surrogates"
+    iterations: 1000
+    null_hypothesis: "Linear Gaussian Process"  # s_n = h(x_n)
+
+# -------------------------------------------------------------------------
+# SECTION 5: HILBERT-HUANG TRANSFORM (HHT)
+# -------------------------------------------------------------------------
+hht:
+  target_variable: "Close"             # Applied to BTC/ETH prices
+  emd_parameters:
+    spline_type: "cubic"               # Envelope interpolation
+    sifting_stop_sd: 0.2               # Sifting convergence criterion
+    max_imfs: 10                       # Max number of IMFs
+  spectrum_parameters:
+    type: "Hilbert"                    # H(t, ω)
+    energy_norm: "max_energy"          # IE_N(t) = IE(t)/max IE
+  extreme_event_detection:
+    formula: "mean + B * sigma"        # E_th = E_mu + B σ
+    B: 4                               # B = 4 per study
+
+# -------------------------------------------------------------------------
+# SECTION 6: STRUCTURAL VECTOR AUTOREGRESSION (SVAR)
+# -------------------------------------------------------------------------
+svar:
+  target_variables:                    # Stationary inputs
+    - "USDC_log_diff"
+    - "USDT_log_diff"
+  model_selection:
+    criterion: "AIC"
+    max_lags: 12
+  identification:
+    method: "Cholesky"
+    orderings:
+      - ["USDC", "USDT"]               # Ordering 1
+      - ["USDT", "USDC"]               # Ordering 2
+  regime_analysis:
+    break_date: "2024-11-05"           # Election day split
+    test: "Wald Statistic"
+    hypothesis: "one_sided"            # H1: post > pre
+
+# -------------------------------------------------------------------------
+# SECTION 7: EXPLICIT MAPPING OF SERIES TO METHODS
+# -------------------------------------------------------------------------
+analysis_targets:
+
+  # Time series to feed into Bai-Perron + SupF + AAFT
+  structural_break_series:
+    blockchain:
+      - "log V_EOA_EOA_USDT"           # log daily EOA-EOA USDT volume
+      - "log V_EOA_EOA_USDC"           # log daily EOA-EOA USDC volume
+      - "log V_SC_SC_USDT"             # log daily SC-SC USDT volume
+      - "log V_SC_SC_USDC"             # log daily SC-SC USDC volume
+    exchange:
+      - "log Volume_USDT_USD"          # log USDT-USD CEX volume
+      - "log Volume_USDC_USD"          # log USDC-USD CEX volume
+    prices:
+      - "log Close_BTC_USD"            # log BTC price
+      - "log Close_ETH_USD"            # log ETH price
+
+  # Time series to feed into HHT + EE detection + AAFT
+  hht_series:
+    - "log Close_BTC_USD"
+    - "log Close_ETH_USD"
+
+  # Time series to feed into SVAR + Wald
+  svar_series:
+    blockchain_EOA:
+      - "Δ log V_EOA_EOA_USDC"
+      - "Δ log V_EOA_EOA_USDT"
+    exchange:
+      - "Δ log Volume_USDC_USD"
+      - "Δ log Volume_USDT_USD"
